@@ -1,13 +1,13 @@
-import dispositivos.DispositivoEletrico;
-import sensores.SensorEnergia;
+import gui.SistemaEnergiaGUI;
+import javax.swing.SwingUtilities;
 
 public class App {
     public static void main(String[] args) {
-
-        DispositivoEletrico lampada = new DispositivoEletrico("Lampada", 60, 5);
-
-        SensorEnergia sensor = new SensorEnergia("S1", lampada, 127, 0.5);
-
-        sensor.registrarLeitura();
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                new SistemaEnergiaGUI().exibir();
+            }
+        });
     }
 }
