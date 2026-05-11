@@ -7,11 +7,16 @@ import simulacao.HistoricoConsumo;
 import simulacao.LeituraSimulada;
 import simulacao.RegistroConsumoDiario;
 import simulacao.SimuladorEnergia;
+import util.ConstantesEnergia;
+import util.FormatadorEnergia;
+import util.TratadorExcecoes;
+import util.ValidadorEntrada;
 
 import java.awt.BorderLayout;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -25,6 +30,7 @@ import java.awt.Insets;
 import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -41,7 +47,6 @@ import java.util.Locale;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
-import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -61,21 +66,34 @@ import javax.swing.JTextField;
 import javax.swing.SwingConstants;
 import javax.swing.Timer;
 import javax.swing.UIManager;
+import javax.swing.JViewport;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.TitledBorder;
+import javax.swing.plaf.basic.BasicButtonUI;
+import javax.swing.plaf.basic.BasicComboBoxUI;
+import javax.swing.plaf.basic.BasicTabbedPaneUI;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
 
 public class SistemaEnergiaGUI {
 
     private static final Locale LOCALE_BR = new Locale("pt", "BR");
-    private static final double TENSAO_PADRAO = 127.0;
-    private static final double LIMITE_ALERTA_WATTS = 6000.0;
-    private static final double LIMITE_USO_WATTS = 1.0;
-    private static final int INTERVALO_ATUALIZACAO_MS = 1000;
-    private static final int MESES_ANO = 12;
+    private static final double TENSAO_PADRAO = ConstantesEnergia.TENSAO_PADRAO_VOLT;
+    private static final double LIMITE_ALERTA_WATTS = ConstantesEnergia.LIMITE_ALERTA_POTENCIA_WATTS;
+    private static final double LIMITE_USO_WATTS = ConstantesEnergia.LIMITE_USO_WATTS;
+    private static final int INTERVALO_ATUALIZACAO_MS = ConstantesEnergia.INTERVALO_ATUALIZACAO_MS;
+    private static final int MESES_ANO = ConstantesEnergia.MESES_POR_ANO;
+    private static final Color COR_FUNDO = new Color(15, 18, 24);
+    private static final Color COR_PAINEL = new Color(25, 30, 39);
+    private static final Color COR_PAINEL_ELEVADO = new Color(32, 39, 50);
+    private static final Color COR_CAMPO = new Color(18, 22, 29);
+    private static final Color COR_PRIMARIA = new Color(71, 141, 216);
+    private static final Color COR_TEXTO = new Color(232, 237, 245);
+    private static final Color COR_TEXTO_SUAVE = new Color(164, 174, 190);
+    private static final Color COR_BORDA = new Color(58, 68, 84);
+    private static final Color COR_GRADE = new Color(44, 53, 67);
 
     private final SistemaEnergetico sistema;
-    private final NumberFormat numeroFormat;
-    private final NumberFormat energiaFormat;
     private final NumberFormat moedaFormat;
     private final SimpleDateFormat horarioFormat;
     private final SimpleDateFormat dataHoraFormat;
@@ -88,11 +106,9 @@ public class SistemaEnergiaGUI {
     private JTextField campoNome;
     private JTextField campoPotencia;
     private JTextField campoTarifa;
-    private JTextField campoSensorId;
-    private JTextField campoTensao;
-    private JTextField campoCorrente;
-    private JComboBox<DispositivoEletrico> comboDispositivos;
     private JComboBox<OpcaoSimulacao> comboEscalaSimulacao;
+    private JComboBox<String> comboMesGrafico;
+    private JComboBox<Integer> comboAnoGrafico;
     private DefaultTableModel modeloTabela;
     private DefaultTableModel modeloMonitoramento;
     private JTable tabelaDispositivos;
@@ -116,7 +132,9 @@ public class SistemaEnergiaGUI {
     private JLabel labelResumoGraficos;
     private JLabel labelResumoCalendario;
     private JLabel labelMesSelecionadoCalendario;
+    private JLabel labelStatusTarifa;
     private GraficoConsumoMensalPanel graficoConsumoMensal;
+    private GraficoConsumoDiarioPanel graficoConsumoDiario;
     private GraficoPotenciaTempoRealPanel graficoPotenciaTempoReal;
     private Timer timerMonitoramento;
     private int contadorLeiturasTempoReal;
@@ -124,12 +142,6 @@ public class SistemaEnergiaGUI {
 
     public SistemaEnergiaGUI() {
         this.sistema = new SistemaEnergetico(0.75);
-        this.numeroFormat = NumberFormat.getNumberInstance(LOCALE_BR);
-        this.numeroFormat.setMinimumFractionDigits(2);
-        this.numeroFormat.setMaximumFractionDigits(2);
-        this.energiaFormat = NumberFormat.getNumberInstance(LOCALE_BR);
-        this.energiaFormat.setMinimumFractionDigits(4);
-        this.energiaFormat.setMaximumFractionDigits(4);
         this.moedaFormat = NumberFormat.getCurrencyInstance(LOCALE_BR);
         this.horarioFormat = new SimpleDateFormat("HH:mm:ss");
         this.dataHoraFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
@@ -148,6 +160,7 @@ public class SistemaEnergiaGUI {
         janela.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         janela.setMinimumSize(new Dimension(980, 620));
         janela.setContentPane(criarConteudo());
+        aplicarTemaEscuro(janela.getContentPane());
         janela.pack();
         janela.setLocationRelativeTo(null);
         janela.setVisible(true);
@@ -159,8 +172,35 @@ public class SistemaEnergiaGUI {
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception excecao) {
+            TratadorExcecoes.logErro("configurar aparencia", "Look and feel indisponivel", excecao);
             // Mantem o visual padrao caso o sistema nao aceite o tema nativo.
         }
+
+        UIManager.put("Panel.background", COR_FUNDO);
+        UIManager.put("Label.foreground", COR_TEXTO);
+        UIManager.put("TabbedPane.background", COR_FUNDO);
+        UIManager.put("TabbedPane.foreground", COR_TEXTO);
+        UIManager.put("TabbedPane.selected", COR_PAINEL_ELEVADO);
+        UIManager.put("Table.background", COR_CAMPO);
+        UIManager.put("Table.foreground", COR_TEXTO);
+        UIManager.put("Table.gridColor", COR_GRADE);
+        UIManager.put("Table.selectionBackground", COR_PRIMARIA);
+        UIManager.put("Table.selectionForeground", Color.WHITE);
+        UIManager.put("TableHeader.background", COR_PAINEL_ELEVADO);
+        UIManager.put("TableHeader.foreground", COR_TEXTO);
+        UIManager.put("TextField.background", COR_CAMPO);
+        UIManager.put("TextField.foreground", COR_TEXTO);
+        UIManager.put("TextField.caretForeground", COR_TEXTO);
+        UIManager.put("TextArea.background", COR_CAMPO);
+        UIManager.put("TextArea.foreground", COR_TEXTO);
+        UIManager.put("ComboBox.background", COR_CAMPO);
+        UIManager.put("ComboBox.foreground", COR_TEXTO);
+        UIManager.put("ScrollPane.background", COR_PAINEL);
+        UIManager.put("Viewport.background", COR_CAMPO);
+        UIManager.put("Button.background", COR_PAINEL_ELEVADO);
+        UIManager.put("Button.foreground", COR_TEXTO);
+        UIManager.put("Button.select", COR_PRIMARIA);
+        UIManager.put("Button.focus", COR_BORDA);
     }
 
     private JPanel criarConteudo() {
@@ -173,23 +213,30 @@ public class SistemaEnergiaGUI {
                 JSplitPane.HORIZONTAL_SPLIT,
                 criarPainelControles(),
                 criarPainelPrincipal());
-        divisor.setResizeWeight(0.30);
+        divisor.setResizeWeight(0.24);
         divisor.setBorder(null);
+        divisor.setDividerSize(8);
 
         raiz.add(divisor, BorderLayout.CENTER);
+        raiz.setBackground(COR_FUNDO);
         return raiz;
     }
 
     private JPanel criarCabecalho() {
         JPanel painel = new JPanel(new BorderLayout());
+        painel.setOpaque(true);
+        painel.setBackground(COR_PRIMARIA);
+        painel.setBorder(new EmptyBorder(18, 20, 18, 20));
 
         JLabel titulo = new JLabel("Sistema de Monitoramento de Energia");
         titulo.setFont(titulo.getFont().deriveFont(Font.BOLD, 22f));
+        titulo.setForeground(Color.WHITE);
 
-        JLabel subtitulo = new JLabel("Consumo, custo e leituras eletricas em uma interface unica");
-        subtitulo.setForeground(new Color(90, 90, 90));
+        JLabel subtitulo = new JLabel("Consumo, custo, graficos e calendario em memoria");
+        subtitulo.setForeground(new Color(219, 231, 246));
 
         JPanel textos = new JPanel(new GridLayout(2, 1, 0, 2));
+        textos.setOpaque(false);
         textos.add(titulo);
         textos.add(subtitulo);
 
@@ -200,12 +247,11 @@ public class SistemaEnergiaGUI {
     private JPanel criarPainelControles() {
         JPanel painel = new JPanel();
         painel.setLayout(new BoxLayout(painel, BoxLayout.Y_AXIS));
+        painel.setBackground(COR_FUNDO);
 
         painel.add(criarPainelTarifa());
         painel.add(Box.createVerticalStrut(12));
         painel.add(criarFormularioDispositivo());
-        painel.add(Box.createVerticalStrut(12));
-        painel.add(criarFormularioSensor());
 
         return painel;
     }
@@ -215,15 +261,20 @@ public class SistemaEnergiaGUI {
         painel.setLayout(new BorderLayout(8, 8));
 
         campoTarifa = new JTextField("0,75");
+        estilizarCampo(campoTarifa);
+        campoTarifa.addActionListener(evento -> atualizarTarifa());
         JButton botaoAtualizar = new JButton("Atualizar");
+        estilizarBotaoPrimario(botaoAtualizar);
         botaoAtualizar.addActionListener(evento -> atualizarTarifa());
+        labelStatusTarifa = criarRotuloCampo("Tarifa pronta");
 
         JPanel linha = new JPanel(new BorderLayout(8, 0));
-        linha.add(new JLabel("R$/kWh"), BorderLayout.WEST);
+        linha.add(criarRotuloCampo("R$/kWh"), BorderLayout.WEST);
         linha.add(campoTarifa, BorderLayout.CENTER);
         linha.add(botaoAtualizar, BorderLayout.EAST);
 
         painel.add(linha, BorderLayout.CENTER);
+        painel.add(labelStatusTarifa, BorderLayout.SOUTH);
         return painel;
     }
 
@@ -233,77 +284,51 @@ public class SistemaEnergiaGUI {
 
         campoNome = new JTextField();
         campoPotencia = new JTextField();
+        estilizarCampo(campoNome);
+        estilizarCampo(campoPotencia);
+        campoNome.addActionListener(evento -> campoPotencia.requestFocusInWindow());
+        campoPotencia.addActionListener(evento -> adicionarDispositivo());
 
         JPanel formulario = new JPanel(new GridBagLayout());
+        formulario.setOpaque(false);
         adicionarCampo(formulario, "Nome", campoNome, 0);
         adicionarCampo(formulario, "Potencia (W)", campoPotencia, 1);
 
         JButton botaoAdicionar = new JButton("Adicionar");
+        estilizarBotaoPrimario(botaoAdicionar);
         botaoAdicionar.addActionListener(evento -> adicionarDispositivo());
 
         JButton botaoRemover = new JButton("Remover selecionado");
+        estilizarBotaoSecundario(botaoRemover);
         botaoRemover.addActionListener(evento -> removerDispositivoSelecionado());
 
-        JPanel botoes = new JPanel(new GridLayout(1, 2, 8, 0));
+        JButton botaoLimpar = new JButton("Limpar campos");
+        estilizarBotaoSecundario(botaoLimpar);
+        botaoLimpar.addActionListener(evento -> limparCamposDispositivo());
+
+        JPanel botoes = new JPanel(new GridLayout(3, 1, 0, 8));
         botoes.add(botaoAdicionar);
         botoes.add(botaoRemover);
+        botoes.add(botaoLimpar);
 
         painel.add(formulario, BorderLayout.CENTER);
         painel.add(botoes, BorderLayout.SOUTH);
         return painel;
     }
 
-    private JPanel criarFormularioSensor() {
-        JPanel painel = criarPainelComTitulo("Sensor");
-        painel.setLayout(new BorderLayout(8, 8));
-
-        comboDispositivos = new JComboBox<DispositivoEletrico>();
-        comboDispositivos.setRenderer(new DefaultListCellRenderer() {
-            @Override
-            public Component getListCellRendererComponent(
-                    JList<?> list,
-                    Object value,
-                    int index,
-                    boolean isSelected,
-                    boolean cellHasFocus) {
-                Component componente = super.getListCellRendererComponent(
-                        list, value, index, isSelected, cellHasFocus);
-                if (value instanceof DispositivoEletrico) {
-                    setText(((DispositivoEletrico) value).getNome());
-                }
-                return componente;
-            }
-        });
-
-        campoSensorId = new JTextField("S5");
-        campoTensao = new JTextField("127");
-        campoCorrente = new JTextField();
-
-        JPanel formulario = new JPanel(new GridBagLayout());
-        adicionarCampo(formulario, "Dispositivo", comboDispositivos, 0);
-        adicionarCampo(formulario, "ID", campoSensorId, 1);
-        adicionarCampo(formulario, "Tensao (V)", campoTensao, 2);
-        adicionarCampo(formulario, "Corrente (A)", campoCorrente, 3);
-
-        JButton botaoRegistrar = new JButton("Registrar leitura");
-        botaoRegistrar.addActionListener(evento -> registrarLeituraSensor());
-
-        painel.add(formulario, BorderLayout.CENTER);
-        painel.add(botaoRegistrar, BorderLayout.SOUTH);
-        return painel;
-    }
-
     private JPanel criarPainelPrincipal() {
         JPanel painel = new JPanel(new BorderLayout(10, 10));
+        painel.setBackground(COR_FUNDO);
         painel.add(criarPainelResumo(), BorderLayout.NORTH);
 
         JTabbedPane abas = new JTabbedPane();
         abas.addTab("Dispositivos", criarPainelTabela());
         abas.addTab("Tempo real", criarPainelMonitoramento());
         abas.addTab("Graficos", criarPainelGraficos());
-        abas.addTab("Calendario mensal", criarPainelCalendarioMensal());
-        abas.addTab("Leituras", criarPainelLeituras());
-        abas.addTab("Relatorio mensal", criarPainelRelatorioMensal());
+        abas.addTab("Calendario", criarPainelCalendarioMensal());
+        abas.addTab("Historico", criarPainelLeituras());
+        abas.addTab("Relatorio", criarPainelRelatorioMensal());
+        estilizarAbas(abas);
 
         painel.add(abas, BorderLayout.CENTER);
         return painel;
@@ -348,8 +373,11 @@ public class SistemaEnergiaGUI {
         tabelaDispositivos = new JTable(modeloTabela);
         tabelaDispositivos.setFillsViewportHeight(true);
         tabelaDispositivos.setRowHeight(24);
+        tabelaDispositivos.setAutoCreateRowSorter(true);
+        estilizarTabela(tabelaDispositivos);
 
         JPanel painel = new JPanel(new BorderLayout());
+        painel.setBackground(COR_PAINEL);
         painel.add(new JScrollPane(tabelaDispositivos), BorderLayout.CENTER);
         return painel;
     }
@@ -375,17 +403,23 @@ public class SistemaEnergiaGUI {
         tabelaMonitoramento = new JTable(modeloMonitoramento);
         tabelaMonitoramento.setFillsViewportHeight(true);
         tabelaMonitoramento.setRowHeight(24);
+        tabelaMonitoramento.setAutoCreateRowSorter(true);
+        estilizarTabela(tabelaMonitoramento);
 
         JButton botaoIniciar = new JButton("Iniciar");
+        estilizarBotaoPrimario(botaoIniciar);
         botaoIniciar.addActionListener(evento -> iniciarMonitoramento());
 
         JButton botaoParar = new JButton("Parar");
+        estilizarBotaoSecundario(botaoParar);
         botaoParar.addActionListener(evento -> pararMonitoramento());
 
         labelStatusMonitoramento = new JLabel("Parado");
         labelPotenciaAtual = new JLabel("Potencia atual: 0,00 W");
         labelCustoHoraAtual = new JLabel("Custo da leitura: R$ 0,00");
         labelEscalaMonitoramento = new JLabel();
+        labelStatusMonitoramento.setForeground(COR_TEXTO_SUAVE);
+        labelEscalaMonitoramento.setForeground(COR_TEXTO_SUAVE);
 
         comboEscalaSimulacao = new JComboBox<OpcaoSimulacao>(new OpcaoSimulacao[] {
             new OpcaoSimulacao("1 segundo", 1),
@@ -393,6 +427,7 @@ public class SistemaEnergiaGUI {
             new OpcaoSimulacao("1 hora", 3600),
             new OpcaoSimulacao("1 dia", 86400)
         });
+        estilizarCombo(comboEscalaSimulacao);
         comboEscalaSimulacao.addActionListener(evento -> {
             atualizarTextoEscalaSimulacao();
             atualizarMonitoramentoSeParado();
@@ -401,7 +436,7 @@ public class SistemaEnergiaGUI {
         JPanel controles = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         controles.add(botaoIniciar);
         controles.add(botaoParar);
-        controles.add(new JLabel("Cada leitura simula:"));
+        controles.add(criarRotuloCampo("Cada leitura simula:"));
         controles.add(comboEscalaSimulacao);
         controles.add(labelEscalaMonitoramento);
         controles.add(labelStatusMonitoramento);
@@ -425,31 +460,55 @@ public class SistemaEnergiaGUI {
 
     private JPanel criarPainelGraficos() {
         graficoConsumoMensal = new GraficoConsumoMensalPanel();
+        graficoConsumoDiario = new GraficoConsumoDiarioPanel();
         graficoPotenciaTempoReal = new GraficoPotenciaTempoRealPanel();
 
         labelResumoGraficos = new JLabel("Graficos prontos para atualizacao");
+        labelResumoGraficos.setForeground(COR_TEXTO_SUAVE);
 
         JButton botaoAtualizar = new JButton("Atualizar graficos");
+        estilizarBotaoSecundario(botaoAtualizar);
         botaoAtualizar.addActionListener(evento -> atualizarGraficos());
 
         JButton botaoLimparHistorico = new JButton("Limpar historico");
+        estilizarBotaoSecundario(botaoLimparHistorico);
         botaoLimparHistorico.addActionListener(evento -> limparHistoricoGraficoTempoReal());
 
+        comboMesGrafico = new JComboBox<String>();
+        for (int mes = 0; mes < MESES_ANO; mes++) {
+            comboMesGrafico.addItem(obterNomeMes(mes));
+        }
+        comboMesGrafico.setSelectedIndex(Calendar.getInstance().get(Calendar.MONTH));
+        estilizarCombo(comboMesGrafico);
+        comboMesGrafico.addActionListener(evento -> atualizarGraficos());
+
+        int anoAtual = Calendar.getInstance().get(Calendar.YEAR);
+        comboAnoGrafico = new JComboBox<Integer>();
+        for (int ano = anoAtual - 2; ano <= anoAtual + 4; ano++) {
+            comboAnoGrafico.addItem(Integer.valueOf(ano));
+        }
+        comboAnoGrafico.setSelectedItem(Integer.valueOf(anoAtual));
+        estilizarCombo(comboAnoGrafico);
+        comboAnoGrafico.addActionListener(evento -> atualizarGraficos());
+
         JPanel barra = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        barra.add(criarRotuloCampo("Mes:"));
+        barra.add(comboMesGrafico);
+        barra.add(criarRotuloCampo("Ano:"));
+        barra.add(comboAnoGrafico);
         barra.add(botaoAtualizar);
         barra.add(botaoLimparHistorico);
         barra.add(labelResumoGraficos);
 
-        JSplitPane divisor = new JSplitPane(
-                JSplitPane.VERTICAL_SPLIT,
-                graficoConsumoMensal,
-                graficoPotenciaTempoReal);
-        divisor.setResizeWeight(0.55);
-        divisor.setBorder(null);
+        JPanel gradeGraficos = new JPanel(new GridLayout(3, 1, 0, 10));
+        gradeGraficos.setBackground(COR_FUNDO);
+        gradeGraficos.add(graficoConsumoMensal);
+        gradeGraficos.add(graficoConsumoDiario);
+        gradeGraficos.add(graficoPotenciaTempoReal);
 
         JPanel painel = new JPanel(new BorderLayout(8, 8));
         painel.add(barra, BorderLayout.NORTH);
-        painel.add(divisor, BorderLayout.CENTER);
+        painel.add(new JScrollPane(gradeGraficos), BorderLayout.CENTER);
         return painel;
     }
 
@@ -457,12 +516,16 @@ public class SistemaEnergiaGUI {
         botoesMesesCalendario = new JButton[MESES_ANO];
 
         JPanel grade = new JPanel(new GridLayout(3, 4, 8, 8));
+        grade.setBackground(COR_FUNDO);
         for (int i = 0; i < MESES_ANO; i++) {
             final int mes = i;
             JButton botaoMes = new JButton();
+            botaoMes.setUI(new BasicButtonUI());
             botaoMes.setHorizontalAlignment(SwingConstants.CENTER);
             botaoMes.setVerticalAlignment(SwingConstants.CENTER);
             botaoMes.setOpaque(true);
+            botaoMes.setContentAreaFilled(false);
+            botaoMes.setFocusPainted(false);
             botaoMes.addActionListener(evento -> {
                 mesSelecionadoCalendario = mes;
                 atualizarCalendarioMensal();
@@ -482,6 +545,7 @@ public class SistemaEnergiaGUI {
         }
 
         labelResumoCalendario = new JLabel("Calendario aguardando leituras");
+        labelResumoCalendario.setForeground(COR_TEXTO_SUAVE);
 
         int anoAtual = Calendar.getInstance().get(Calendar.YEAR);
         comboAnoCalendario = new JComboBox<Integer>();
@@ -489,16 +553,19 @@ public class SistemaEnergiaGUI {
             comboAnoCalendario.addItem(Integer.valueOf(ano));
         }
         comboAnoCalendario.setSelectedItem(Integer.valueOf(anoAtual));
+        estilizarCombo(comboAnoCalendario);
         comboAnoCalendario.addActionListener(evento -> atualizarCalendarioMensal());
 
         JButton botaoAtualizar = new JButton("Atualizar calendario");
+        estilizarBotaoSecundario(botaoAtualizar);
         botaoAtualizar.addActionListener(evento -> atualizarCalendarioMensal());
 
         JButton botaoZerar = new JButton("Zerar coletas");
+        estilizarBotaoSecundario(botaoZerar);
         botaoZerar.addActionListener(evento -> zerarColetasMensais());
 
         JPanel barra = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        barra.add(new JLabel("Ano:"));
+        barra.add(criarRotuloCampo("Ano:"));
         barra.add(comboAnoCalendario);
         barra.add(botaoAtualizar);
         barra.add(botaoZerar);
@@ -525,15 +592,19 @@ public class SistemaEnergiaGUI {
         tabelaDetalhesCalendario = new JTable(modeloDetalhesCalendario);
         tabelaDetalhesCalendario.setFillsViewportHeight(true);
         tabelaDetalhesCalendario.setRowHeight(24);
+        tabelaDetalhesCalendario.setAutoCreateRowSorter(true);
+        estilizarTabela(tabelaDetalhesCalendario);
 
         labelMesSelecionadoCalendario = new JLabel("Mes");
         labelMesSelecionadoCalendario.setFont(labelMesSelecionadoCalendario.getFont().deriveFont(Font.BOLD, 14f));
+        labelMesSelecionadoCalendario.setForeground(COR_TEXTO);
 
         areaAnaliseCalendario = new JTextArea();
         areaAnaliseCalendario.setEditable(false);
         areaAnaliseCalendario.setLineWrap(true);
         areaAnaliseCalendario.setWrapStyleWord(true);
         areaAnaliseCalendario.setRows(8);
+        estilizarAreaTexto(areaAnaliseCalendario);
 
         JPanel painelDetalhes = new JPanel(new BorderLayout(8, 8));
         painelDetalhes.add(labelMesSelecionadoCalendario, BorderLayout.NORTH);
@@ -554,8 +625,10 @@ public class SistemaEnergiaGUI {
         areaLeituras.setEditable(false);
         areaLeituras.setLineWrap(true);
         areaLeituras.setWrapStyleWord(true);
+        estilizarAreaTexto(areaLeituras);
 
         JPanel painel = new JPanel(new BorderLayout());
+        painel.setBackground(COR_PAINEL);
         painel.add(new JScrollPane(areaLeituras), BorderLayout.CENTER);
         return painel;
     }
@@ -566,11 +639,14 @@ public class SistemaEnergiaGUI {
         areaRelatorioMensal.setLineWrap(true);
         areaRelatorioMensal.setWrapStyleWord(true);
         areaRelatorioMensal.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        estilizarAreaTexto(areaRelatorioMensal);
 
         JButton botaoAtualizar = new JButton("Atualizar relatorio");
+        estilizarBotaoSecundario(botaoAtualizar);
         botaoAtualizar.addActionListener(evento -> atualizarRelatorioMensal());
 
         JButton botaoExportar = new JButton("Exportar TXT");
+        estilizarBotaoPrimario(botaoExportar);
         botaoExportar.addActionListener(evento -> exportarRelatorioMensal());
 
         JPanel botoes = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
@@ -585,18 +661,27 @@ public class SistemaEnergiaGUI {
 
     private JPanel criarPainelComTitulo(String titulo) {
         JPanel painel = new JPanel();
+        painel.setBackground(COR_PAINEL);
         painel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createTitledBorder(titulo),
-                new EmptyBorder(8, 8, 8, 8)));
+                criarBordaTituloEscura(titulo),
+                new EmptyBorder(10, 10, 10, 10)));
         return painel;
+    }
+
+    private TitledBorder criarBordaTituloEscura(String titulo) {
+        TitledBorder bordaTitulo = BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(COR_BORDA),
+                titulo);
+        bordaTitulo.setTitleColor(COR_TEXTO_SUAVE);
+        return bordaTitulo;
     }
 
     private JLabel criarCartaoResumo(String titulo, String valor) {
         JLabel label = new JLabel(criarTextoResumo(titulo, valor), SwingConstants.CENTER);
         label.setOpaque(true);
-        label.setBackground(new Color(245, 247, 250));
+        label.setBackground(COR_PAINEL);
         label.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(220, 225, 230)),
+                BorderFactory.createLineBorder(COR_BORDA),
                 new EmptyBorder(10, 8, 10, 8)));
         return label;
     }
@@ -604,18 +689,178 @@ public class SistemaEnergiaGUI {
     private JLabel criarIndicadorTempoReal(JLabel label) {
         label.setOpaque(true);
         label.setHorizontalAlignment(SwingConstants.CENTER);
-        label.setBackground(new Color(245, 247, 250));
+        label.setBackground(COR_PAINEL);
         label.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(220, 225, 230)),
+                BorderFactory.createLineBorder(COR_BORDA),
                 new EmptyBorder(10, 8, 10, 8)));
         return label;
     }
 
     private String criarTextoResumo(String titulo, String valor) {
         return "<html><body style='text-align:center'>"
-                + "<div style='font-size:10px;color:#555555'>" + titulo + "</div>"
-                + "<div style='font-size:16px;font-weight:bold'>" + valor + "</div>"
+                + "<div style='font-size:10px;color:#a4aebe'>" + titulo + "</div>"
+                + "<div style='font-size:16px;font-weight:bold;color:#e8edf5'>" + valor + "</div>"
                 + "</body></html>";
+    }
+
+    private void estilizarCampo(JTextField campo) {
+        campo.setBackground(COR_CAMPO);
+        campo.setForeground(COR_TEXTO);
+        campo.setCaretColor(COR_TEXTO);
+        campo.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(COR_BORDA),
+                new EmptyBorder(5, 7, 5, 7)));
+    }
+
+    private void estilizarCombo(JComboBox<?> combo) {
+        combo.setUI(new BasicComboBoxUI());
+        combo.setBackground(COR_CAMPO);
+        combo.setForeground(COR_TEXTO);
+        combo.setOpaque(true);
+        combo.setBorder(BorderFactory.createLineBorder(COR_BORDA));
+        combo.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(
+                    JList<?> list,
+                    Object value,
+                    int index,
+                    boolean isSelected,
+                    boolean cellHasFocus) {
+                Component componente = super.getListCellRendererComponent(
+                        list, value, index, isSelected, cellHasFocus);
+                componente.setBackground(isSelected ? COR_PRIMARIA : COR_CAMPO);
+                componente.setForeground(COR_TEXTO);
+                return componente;
+            }
+        });
+    }
+
+    private void estilizarAbas(final JTabbedPane abas) {
+        abas.setOpaque(true);
+        abas.setBackground(COR_FUNDO);
+        abas.setForeground(COR_TEXTO_SUAVE);
+        abas.setBorder(BorderFactory.createLineBorder(COR_BORDA));
+        abas.setUI(new BasicTabbedPaneUI() {
+            @Override
+            protected void paintTabBackground(
+                    Graphics graphics,
+                    int tabPlacement,
+                    int tabIndex,
+                    int x,
+                    int y,
+                    int width,
+                    int height,
+                    boolean isSelected) {
+                graphics.setColor(isSelected ? COR_PAINEL_ELEVADO : COR_CAMPO);
+                graphics.fillRect(x, y, width, height);
+            }
+
+            @Override
+            protected void paintContentBorder(Graphics graphics, int tabPlacement, int selectedIndex) {
+                graphics.setColor(COR_BORDA);
+                graphics.drawRect(0, 0, abas.getWidth() - 1, abas.getHeight() - 1);
+            }
+        });
+
+        for (int i = 0; i < abas.getTabCount(); i++) {
+            abas.setBackgroundAt(i, i == abas.getSelectedIndex() ? COR_PAINEL_ELEVADO : COR_CAMPO);
+            abas.setForegroundAt(i, COR_TEXTO_SUAVE);
+        }
+    }
+
+    private void estilizarAreaTexto(JTextArea area) {
+        area.setBackground(COR_CAMPO);
+        area.setForeground(COR_TEXTO);
+        area.setCaretColor(COR_TEXTO);
+        area.setBorder(new EmptyBorder(8, 8, 8, 8));
+    }
+
+    private void estilizarTabela(JTable tabela) {
+        tabela.setBackground(COR_CAMPO);
+        tabela.setForeground(COR_TEXTO);
+        tabela.setGridColor(COR_GRADE);
+        tabela.setSelectionBackground(COR_PRIMARIA);
+        tabela.setSelectionForeground(Color.WHITE);
+        tabela.getTableHeader().setBackground(COR_PAINEL_ELEVADO);
+        tabela.getTableHeader().setForeground(COR_TEXTO);
+        tabela.getTableHeader().setBorder(BorderFactory.createLineBorder(COR_BORDA));
+        tabela.getTableHeader().setDefaultRenderer(new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(
+                    JTable table,
+                    Object value,
+                    boolean isSelected,
+                    boolean hasFocus,
+                    int row,
+                    int column) {
+                Component componente = super.getTableCellRendererComponent(
+                        table, value, isSelected, hasFocus, row, column);
+                componente.setBackground(COR_PAINEL_ELEVADO);
+                componente.setForeground(COR_TEXTO);
+                setBorder(BorderFactory.createLineBorder(COR_BORDA));
+                return componente;
+            }
+        });
+    }
+
+    private void estilizarBotaoPrimario(JButton botao) {
+        botao.setBackground(COR_PRIMARIA);
+        botao.setForeground(Color.WHITE);
+        botao.setOpaque(true);
+        botao.setContentAreaFilled(false);
+        botao.setFocusPainted(false);
+        botao.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(COR_PRIMARIA),
+                new EmptyBorder(6, 12, 6, 12)));
+    }
+
+    private void estilizarBotaoSecundario(JButton botao) {
+        botao.setBackground(COR_PAINEL_ELEVADO);
+        botao.setForeground(COR_TEXTO);
+        botao.setOpaque(true);
+        botao.setContentAreaFilled(false);
+        botao.setFocusPainted(false);
+        botao.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(COR_BORDA),
+                new EmptyBorder(6, 12, 6, 12)));
+    }
+
+    private void aplicarTemaEscuro(Component componente) {
+        if (componente instanceof JPanel) {
+            if (Color.WHITE.equals(componente.getBackground())) {
+                componente.setBackground(COR_FUNDO);
+            }
+        } else if (componente instanceof JTextField) {
+            estilizarCampo((JTextField) componente);
+        } else if (componente instanceof JTextArea) {
+            estilizarAreaTexto((JTextArea) componente);
+        } else if (componente instanceof JTable) {
+            estilizarTabela((JTable) componente);
+        } else if (componente instanceof JComboBox<?>) {
+            estilizarCombo((JComboBox<?>) componente);
+        } else if (componente instanceof JScrollPane) {
+            componente.setBackground(COR_PAINEL);
+            ((JScrollPane) componente).getViewport().setBackground(COR_CAMPO);
+        } else if (componente instanceof JViewport) {
+            componente.setBackground(COR_CAMPO);
+        } else if (componente instanceof JButton) {
+            JButton botao = (JButton) componente;
+            if (botao.getBackground() == null || Color.WHITE.equals(botao.getBackground())) {
+                estilizarBotaoSecundario(botao);
+            }
+        } else if (componente instanceof JLabel) {
+            JLabel label = (JLabel) componente;
+            if (!Color.WHITE.equals(label.getForeground())) {
+                label.setForeground(COR_TEXTO_SUAVE);
+            }
+        }
+
+        if (componente instanceof Container) {
+            Component[] filhos = ((Container) componente).getComponents();
+            for (Component filho : filhos) {
+                aplicarTemaEscuro(filho);
+            }
+        }
     }
 
     private void adicionarCampo(JPanel painel, String rotulo, Component campo, int linha) {
@@ -632,8 +877,14 @@ public class SistemaEnergiaGUI {
         campoConstraints.fill = GridBagConstraints.HORIZONTAL;
         campoConstraints.insets = new Insets(4, 0, 4, 0);
 
-        painel.add(new JLabel(rotulo), labelConstraints);
+        painel.add(criarRotuloCampo(rotulo), labelConstraints);
         painel.add(campo, campoConstraints);
+    }
+
+    private JLabel criarRotuloCampo(String texto) {
+        JLabel label = new JLabel(texto);
+        label.setForeground(COR_TEXTO_SUAVE);
+        return label;
     }
 
     private void carregarDispositivosIniciais() {
@@ -646,14 +897,16 @@ public class SistemaEnergiaGUI {
     private void adicionarDispositivo() {
         try {
             String nome = campoNome.getText().trim();
-            if (nome.isEmpty()) {
-                throw new IllegalArgumentException("Informe o nome do dispositivo.");
+            if (!ValidadorEntrada.validarNomeDispositivo(nome)) {
+                throw new IllegalArgumentException(ValidadorEntrada.obterMensagemErro("Nome", "nome"));
+            }
+            if (existeDispositivoComNome(nome)) {
+                throw new IllegalArgumentException("Ja existe um dispositivo cadastrado com esse nome.");
             }
 
             double potencia = lerNumero(campoPotencia, "potencia");
-
-            if (potencia <= 0) {
-                throw new IllegalArgumentException("A potencia deve ser maior que zero.");
+            if (!ValidadorEntrada.validarPotencia(normalizarNumero(campoPotencia.getText()))) {
+                throw new IllegalArgumentException(ValidadorEntrada.obterMensagemErro("Potencia", "potencia"));
             }
 
             DispositivoEletrico dispositivo = new DispositivoEletrico(nome, potencia);
@@ -664,11 +917,38 @@ public class SistemaEnergiaGUI {
 
             atualizarTela();
             atualizarMonitoramentoSeParado();
-            comboDispositivos.setSelectedItem(dispositivo);
+            selecionarDispositivoNaTabela(dispositivo);
             campoNome.requestFocusInWindow();
         } catch (IllegalArgumentException excecao) {
             mostrarErro(excecao.getMessage());
         }
+    }
+
+    private boolean existeDispositivoComNome(String nome) {
+        for (DispositivoEletrico dispositivo : sistema.obterDispositivos()) {
+            if (dispositivo.getNome().equalsIgnoreCase(nome.trim())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void limparCamposDispositivo() {
+        campoNome.setText("");
+        campoPotencia.setText("");
+        tabelaDispositivos.clearSelection();
+        campoNome.requestFocusInWindow();
+    }
+
+    private void selecionarDispositivoNaTabela(DispositivoEletrico dispositivo) {
+        int indiceModelo = sistema.obterDispositivos().indexOf(dispositivo);
+        if (indiceModelo < 0 || tabelaDispositivos == null) {
+            return;
+        }
+
+        int indiceVisual = tabelaDispositivos.convertRowIndexToView(indiceModelo);
+        tabelaDispositivos.setRowSelectionInterval(indiceVisual, indiceVisual);
+        tabelaDispositivos.scrollRectToVisible(tabelaDispositivos.getCellRect(indiceVisual, 0, true));
     }
 
     private void removerDispositivoSelecionado() {
@@ -697,11 +977,15 @@ public class SistemaEnergiaGUI {
     private void atualizarTarifa() {
         try {
             double tarifa = lerNumero(campoTarifa, "tarifa");
-            if (tarifa < 0) {
-                throw new IllegalArgumentException("A tarifa nao pode ser negativa.");
+            if (!ValidadorEntrada.validarNumeroNaoNegativo(normalizarNumero(campoTarifa.getText()))) {
+                throw new IllegalArgumentException(ValidadorEntrada.obterMensagemErro("Tarifa", "naoNegativo"));
             }
 
             sistema.definirTarifaEnergia(tarifa);
+            if (labelStatusTarifa != null) {
+                labelStatusTarifa.setText("Tarifa atualizada: " + moedaFormat.format(tarifa) + " por kWh");
+                labelStatusTarifa.setForeground(new Color(122, 216, 161));
+            }
             atualizarTela();
             atualizarMonitoramentoSeParado();
         } catch (IllegalArgumentException excecao) {
@@ -709,60 +993,8 @@ public class SistemaEnergiaGUI {
         }
     }
 
-    private void registrarLeituraSensor() {
-        try {
-            DispositivoEletrico dispositivo = (DispositivoEletrico) comboDispositivos.getSelectedItem();
-            if (dispositivo == null) {
-                throw new IllegalArgumentException("Cadastre um dispositivo antes de registrar leituras.");
-            }
-
-            String idSensor = campoSensorId.getText().trim();
-            if (idSensor.isEmpty()) {
-                throw new IllegalArgumentException("Informe o ID do sensor.");
-            }
-
-            double tensao = lerNumero(campoTensao, "tensao");
-            double corrente = lerNumero(campoCorrente, "corrente");
-
-            if (tensao <= 0 || corrente < 0) {
-                throw new IllegalArgumentException("Tensao deve ser maior que zero e corrente nao pode ser negativa.");
-            }
-
-            SensorEnergia sensor = new SensorEnergia(
-                    idSensor,
-                    dispositivo,
-                    tensao,
-                    corrente,
-                    obterSegundosPorLeituraSelecionado());
-            double potenciaMedida = sensor.medirPotencia();
-            double diferenca = potenciaMedida - dispositivo.getPotenciaWatts();
-
-            dispositivo.registrarLeituraSensor(potenciaMedida, sensor.getDuracaoLeituraSegundos());
-            List<LeituraSimulada> leituras = new ArrayList<LeituraSimulada>();
-            leituras.add(new LeituraSimulada(dispositivo.getNome(), potenciaMedida));
-            registrarPeriodoNoHistorico(leituras, sensor.getDuracaoLeituraSegundos());
-
-            areaLeituras.append("Sensor " + sensor.getIdSensor()
-                    + " | " + dispositivo.getNome()
-                    + " | Tensao: " + formatarNumero(tensao) + " V"
-                    + " | Corrente: " + formatarNumero(corrente) + " A"
-                    + " | Potencia: " + formatarNumero(potenciaMedida) + " W"
-                    + " | Tempo: " + formatarTempo(sensor.getDuracaoLeituraSegundos())
-                    + " | Energia: " + formatarEnergia(sensor.medirEnergiaKWh()) + " kWh"
-                    + " | Dif.: " + formatarNumero(diferenca) + " W"
-                    + System.lineSeparator());
-
-            campoCorrente.setText("");
-            areaLeituras.setCaretPosition(areaLeituras.getDocument().getLength());
-            atualizarTela();
-        } catch (IllegalArgumentException excecao) {
-            mostrarErro(excecao.getMessage());
-        }
-    }
-
     private void atualizarTela() {
         atualizarTabela();
-        atualizarComboDispositivos();
         atualizarResumo();
         atualizarRelatorioMensal();
         atualizarMonitoramentoSeParado();
@@ -774,14 +1006,14 @@ public class SistemaEnergiaGUI {
         modeloTabela.setRowCount(0);
 
         for (DispositivoEletrico dispositivo : sistema.obterDispositivos()) {
-            double custoMensal = dispositivo.calcularConsumoMensal() * sistema.obterTarifaEnergia();
+            double custoMensal = dispositivo.projetarConsumoMensalKWh() * sistema.obterTarifaEnergia();
 
             modeloTabela.addRow(new Object[] {
                 dispositivo.getNome(),
                 formatarNumero(dispositivo.getPotenciaWatts()),
                 formatarTempo(dispositivo.obterTempoUsoSegundos()),
                 formatarEnergia(dispositivo.obterEnergiaColetadaKWh()) + " kWh",
-                formatarEnergia(dispositivo.calcularConsumoMensal()) + " kWh",
+                formatarEnergia(dispositivo.projetarConsumoMensalKWh()) + " kWh",
                 moedaFormat.format(custoMensal)
             });
         }
@@ -876,7 +1108,8 @@ public class SistemaEnergiaGUI {
             });
         }
 
-        double energiaLeituraKWh = (potenciaTotal * duracaoLeitura) / 3600000.0;
+        double energiaLeituraKWh = (potenciaTotal * duracaoLeitura)
+                / (ConstantesEnergia.SEGUNDOS_POR_HORA * ConstantesEnergia.FATOR_CONVERSAO_KWATTS);
         double custoLeitura = energiaLeituraKWh * sistema.obterTarifaEnergia();
         labelPotenciaAtual.setText("Potencia atual: " + formatarNumero(potenciaTotal) + " W");
         labelCustoHoraAtual.setText("Energia/leitura: " + formatarEnergia(energiaLeituraKWh)
@@ -964,6 +1197,10 @@ public class SistemaEnergiaGUI {
             graficoConsumoMensal.repaint();
         }
 
+        if (graficoConsumoDiario != null) {
+            graficoConsumoDiario.repaint();
+        }
+
         if (graficoPotenciaTempoReal != null) {
             graficoPotenciaTempoReal.repaint();
         }
@@ -971,6 +1208,7 @@ public class SistemaEnergiaGUI {
         if (labelResumoGraficos != null) {
             labelResumoGraficos.setText("Dispositivos: " + sistema.obterQuantidadeDispositivos()
                     + " | Proj. mensal: " + formatarEnergia(sistema.calcularConsumoMensal()) + " kWh"
+                    + " | Consumo do mes: " + formatarEnergia(calcularEnergiaMesGrafico()) + " kWh"
                     + " | Amostras: " + historicoPotenciaTempoReal.size());
         }
     }
@@ -989,15 +1227,19 @@ public class SistemaEnergiaGUI {
             double energiaMes = calcularEnergiaMes(i);
             double custoMes = energiaMes * sistema.obterTarifaEnergia();
 
-            botao.setText("<html><body style='text-align:center'>"
+            botao.setText("<html><body style='text-align:center;color:#e8edf5'>"
                     + "<b>" + obterNomeMes(i) + "</b><br>"
                     + diasMes + " dias<br>"
                     + formatarEnergia(energiaMes) + " kWh<br>"
                     + moedaFormat.format(custoMes)
                     + "</body></html>");
             botao.setBackground(obterCorMesCalendario(energiaMes, maiorEnergia));
+            botao.setForeground(COR_TEXTO);
+            botao.setFocusPainted(false);
+            botao.setContentAreaFilled(false);
+            botao.setOpaque(true);
             botao.setBorder(BorderFactory.createLineBorder(
-                    i == mesSelecionadoCalendario ? new Color(35, 98, 168) : new Color(210, 215, 220),
+                    i == mesSelecionadoCalendario ? COR_PRIMARIA : COR_BORDA,
                     i == mesSelecionadoCalendario ? 3 : 1));
         }
 
@@ -1188,13 +1430,14 @@ public class SistemaEnergiaGUI {
 
     private Color obterCorMesCalendario(double energiaMes, double maiorEnergia) {
         if (energiaMes <= 0 || maiorEnergia <= 0) {
-            return new Color(247, 248, 250);
+            return COR_PAINEL_ELEVADO;
         }
 
         double intensidade = Math.min(1.0, energiaMes / maiorEnergia);
-        int verde = 245 - (int) Math.round(90 * intensidade);
-        int azul = 235 - (int) Math.round(150 * intensidade);
-        return new Color(255, Math.max(150, verde), Math.max(75, azul));
+        int vermelho = 34 + (int) Math.round(72 * intensidade);
+        int verde = 47 + (int) Math.round(70 * intensidade);
+        int azul = 62 + (int) Math.round(110 * intensidade);
+        return new Color(vermelho, verde, azul);
     }
 
     private int obterAnoCalendario() {
@@ -1203,6 +1446,22 @@ public class SistemaEnergiaGUI {
         }
 
         return ((Integer) comboAnoCalendario.getSelectedItem()).intValue();
+    }
+
+    private int obterMesGrafico() {
+        if (comboMesGrafico == null || comboMesGrafico.getSelectedIndex() < 0) {
+            return Calendar.getInstance().get(Calendar.MONTH);
+        }
+
+        return comboMesGrafico.getSelectedIndex();
+    }
+
+    private int obterAnoGrafico() {
+        if (comboAnoGrafico == null || comboAnoGrafico.getSelectedItem() == null) {
+            return Calendar.getInstance().get(Calendar.YEAR);
+        }
+
+        return ((Integer) comboAnoGrafico.getSelectedItem()).intValue();
     }
 
     private void selecionarAnoCalendario(int ano) {
@@ -1223,9 +1482,13 @@ public class SistemaEnergiaGUI {
     }
 
     private int obterDiasDoMes(int indiceMes) {
+        return obterDiasDoMes(indiceMes, obterAnoCalendario());
+    }
+
+    private int obterDiasDoMes(int indiceMes, int ano) {
         Calendar calendario = Calendar.getInstance();
         calendario.clear();
-        calendario.set(Calendar.YEAR, obterAnoCalendario());
+        calendario.set(Calendar.YEAR, ano);
         calendario.set(Calendar.MONTH, indiceMes);
         calendario.set(Calendar.DAY_OF_MONTH, 1);
         return calendario.getActualMaximum(Calendar.DAY_OF_MONTH);
@@ -1295,6 +1558,10 @@ public class SistemaEnergiaGUI {
         return historicoConsumo.calcularEnergiaMes(obterAnoCalendario(), indiceMes);
     }
 
+    private double calcularEnergiaMesGrafico() {
+        return historicoConsumo.calcularEnergiaMes(obterAnoGrafico(), obterMesGrafico());
+    }
+
     private double calcularEnergiaDispositivoMes(String nomeDispositivo, int indiceMes) {
         return historicoConsumo.calcularEnergiaDispositivoMes(
                 nomeDispositivo,
@@ -1314,6 +1581,31 @@ public class SistemaEnergiaGUI {
         double maior = 0;
         for (int mes = 0; mes < MESES_ANO; mes++) {
             maior = Math.max(maior, calcularEnergiaMes(mes));
+        }
+        return maior;
+    }
+
+    private double obterEnergiaDia(int indiceMes, int dia) {
+        return obterEnergiaDia(obterAnoCalendario(), indiceMes, dia);
+    }
+
+    private double obterEnergiaDia(int ano, int indiceMes, int dia) {
+        RegistroConsumoDiario registro = historicoConsumo.obterRegistroDia(
+                ano,
+                indiceMes,
+                dia);
+        return registro == null ? 0 : registro.obterEnergiaKWh();
+    }
+
+    private double obterMaiorEnergiaDiariaMes(int indiceMes) {
+        return obterMaiorEnergiaDiariaMes(obterAnoCalendario(), indiceMes);
+    }
+
+    private double obterMaiorEnergiaDiariaMes(int ano, int indiceMes) {
+        double maior = 0;
+        int diasMes = obterDiasDoMes(indiceMes, ano);
+        for (int dia = 1; dia <= diasMes; dia++) {
+            maior = Math.max(maior, obterEnergiaDia(ano, indiceMes, dia));
         }
         return maior;
     }
@@ -1361,7 +1653,7 @@ public class SistemaEnergiaGUI {
         relatorio.append("------------------------------------------------------------").append(System.lineSeparator());
 
         for (DispositivoEletrico dispositivo : sistema.obterDispositivos()) {
-            double consumoMensal = dispositivo.calcularConsumoMensal();
+            double consumoMensal = dispositivo.projetarConsumoMensalKWh();
             double custoMensal = consumoMensal * sistema.obterTarifaEnergia();
 
             if (consumoMensal > maiorConsumo) {
@@ -1444,21 +1736,8 @@ public class SistemaEnergiaGUI {
             writer.write(areaRelatorioMensal.getText());
             JOptionPane.showMessageDialog(janela, "Relatorio exportado com sucesso.");
         } catch (IOException excecao) {
+            TratadorExcecoes.logErro("exportar relatorio mensal", "Falha de escrita", excecao);
             mostrarErro("Nao foi possivel exportar o relatorio.");
-        }
-    }
-
-    private void atualizarComboDispositivos() {
-        DispositivoEletrico selecionado = (DispositivoEletrico) comboDispositivos.getSelectedItem();
-        DefaultComboBoxModel<DispositivoEletrico> modelo = new DefaultComboBoxModel<DispositivoEletrico>();
-
-        for (DispositivoEletrico dispositivo : sistema.obterDispositivos()) {
-            modelo.addElement(dispositivo);
-        }
-
-        comboDispositivos.setModel(modelo);
-        if (selecionado != null && sistema.obterDispositivos().contains(selecionado)) {
-            comboDispositivos.setSelectedItem(selecionado);
         }
     }
 
@@ -1481,7 +1760,7 @@ public class SistemaEnergiaGUI {
     }
 
     private double lerNumero(JTextField campo, String nomeCampo) {
-        String texto = campo.getText().trim().replace(",", ".");
+        String texto = normalizarNumero(campo.getText());
         if (texto.isEmpty()) {
             throw new IllegalArgumentException("Informe o valor de " + nomeCampo + ".");
         }
@@ -1493,12 +1772,16 @@ public class SistemaEnergiaGUI {
         }
     }
 
+    private String normalizarNumero(String texto) {
+        return ValidadorEntrada.normalizarNumero(texto);
+    }
+
     private String formatarNumero(double valor) {
-        return numeroFormat.format(valor);
+        return FormatadorEnergia.formatarNumero(valor);
     }
 
     private String formatarEnergia(double valor) {
-        return energiaFormat.format(valor);
+        return FormatadorEnergia.formatarEnergia(valor);
     }
 
     private String formatarTempo(double segundos) {
@@ -1506,19 +1789,7 @@ public class SistemaEnergiaGUI {
     }
 
     private String formatarTempo(long segundos) {
-        if (segundos < 60) {
-            return segundos + " s";
-        }
-
-        long horas = segundos / 3600;
-        long minutos = (segundos % 3600) / 60;
-        long segundosRestantes = segundos % 60;
-
-        if (horas > 0) {
-            return horas + " h " + minutos + " min " + segundosRestantes + " s";
-        }
-
-        return minutos + " min " + segundosRestantes + " s";
+        return FormatadorEnergia.formatarTempo(segundos);
     }
 
     private void mostrarErro(String mensagem) {
@@ -1551,13 +1822,13 @@ public class SistemaEnergiaGUI {
 
     private class GraficoConsumoMensalPanel extends JPanel {
 
-        private final Color corBarra = new Color(42, 113, 184);
-        private final Color corBarraDestaque = new Color(226, 125, 49);
+        private final Color corBarra = new Color(83, 151, 225);
+        private final Color corBarraDestaque = new Color(244, 169, 85);
 
         public GraficoConsumoMensalPanel() {
             setPreferredSize(new Dimension(640, 260));
-            setBackground(Color.WHITE);
-            setBorder(BorderFactory.createTitledBorder("Projecao mensal por dispositivo"));
+            setBackground(COR_PAINEL);
+            setBorder(criarBordaTituloEscura("Projecao mensal por dispositivo"));
         }
 
         @Override
@@ -1596,7 +1867,7 @@ public class SistemaEnergiaGUI {
 
             for (int i = 0; i < quantidade; i++) {
                 DispositivoEletrico dispositivo = sistema.obterDispositivos().get(i);
-                double consumo = dispositivo.calcularConsumoMensal();
+                double consumo = dispositivo.projetarConsumoMensalKWh();
                 double custo = consumo * sistema.obterTarifaEnergia();
                 int alturaBarra = (int) Math.round((consumo / maiorConsumo) * (areaAltura - 10));
                 int x = margemEsquerda + (i * larguraSlot) + ((larguraSlot - larguraBarra) / 2);
@@ -1605,7 +1876,7 @@ public class SistemaEnergiaGUI {
                 g2.setColor(consumo == maiorConsumo ? corBarraDestaque : corBarra);
                 g2.fillRoundRect(x, y, larguraBarra, alturaBarra, 8, 8);
 
-                g2.setColor(new Color(70, 70, 70));
+                g2.setColor(COR_TEXTO);
                 String valor = formatarEnergia(consumo) + " kWh";
                 g2.drawString(valor, centralizarTexto(metricas, valor, x, larguraBarra), y - 6);
 
@@ -1616,7 +1887,7 @@ public class SistemaEnergiaGUI {
                 g2.drawString(custoTexto, centralizarTexto(metricas, custoTexto, x, larguraBarra), margemTopo + areaAltura + 38);
             }
 
-            g2.setColor(new Color(70, 70, 70));
+            g2.setColor(COR_TEXTO_SUAVE);
             g2.drawString("kWh/mes", 12, margemTopo + 10);
             g2.drawString(formatarEnergia(maiorConsumo), 12, margemTopo + 24);
             g2.dispose();
@@ -1627,8 +1898,8 @@ public class SistemaEnergiaGUI {
 
         public GraficoPotenciaTempoRealPanel() {
             setPreferredSize(new Dimension(640, 220));
-            setBackground(Color.WHITE);
-            setBorder(BorderFactory.createTitledBorder("Potencia total em tempo real"));
+            setBackground(COR_PAINEL);
+            setBorder(criarBordaTituloEscura("Potencia total em tempo real"));
         }
 
         @Override
@@ -1660,7 +1931,7 @@ public class SistemaEnergiaGUI {
 
             desenharEixos(g2, margemEsquerda, margemTopo, areaLargura, areaAltura);
 
-            g2.setColor(new Color(30, 126, 86));
+            g2.setColor(new Color(76, 196, 140));
             g2.setStroke(new BasicStroke(3f));
 
             int quantidade = historicoPotenciaTempoReal.size();
@@ -1676,7 +1947,7 @@ public class SistemaEnergiaGUI {
                 yAnterior = yAtual;
             }
 
-            g2.setColor(new Color(30, 126, 86));
+            g2.setColor(new Color(76, 196, 140));
             for (int i = 0; i < quantidade; i++) {
                 int x = margemEsquerda + (int) Math.round((i / (double) Math.max(1, quantidade - 1)) * areaLargura);
                 int y = calcularY(historicoPotenciaTempoReal.get(i), maiorPotencia, margemTopo, areaAltura);
@@ -1684,7 +1955,7 @@ public class SistemaEnergiaGUI {
             }
 
             g2.setStroke(new BasicStroke(1f));
-            g2.setColor(new Color(70, 70, 70));
+            g2.setColor(COR_TEXTO_SUAVE);
             g2.drawString("W", 26, margemTopo + 10);
             g2.drawString(formatarNumero(maiorPotencia), 12, margemTopo + 24);
             g2.drawString("Ultimos " + quantidade + " pontos", margemEsquerda, altura - 16);
@@ -1696,14 +1967,209 @@ public class SistemaEnergiaGUI {
         }
     }
 
+    private class GraficoConsumoDiarioPanel extends JPanel {
+
+        private final Color corLinha = new Color(76, 196, 140);
+        private final Color corPonto = new Color(132, 232, 178);
+        private int diaDestacado = -1;
+
+        public GraficoConsumoDiarioPanel() {
+            setPreferredSize(new Dimension(640, 230));
+            setBackground(COR_PAINEL);
+            setBorder(criarBordaTituloEscura("Consumo diario do mes selecionado"));
+            setToolTipText("");
+
+            addMouseMotionListener(new MouseMotionAdapter() {
+                @Override
+                public void mouseMoved(MouseEvent evento) {
+                    atualizarDiaDestacado(evento.getX(), evento.getY());
+                }
+            });
+
+            addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseExited(MouseEvent evento) {
+                    diaDestacado = -1;
+                    setToolTipText("");
+                    repaint();
+                }
+            });
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            super.paintComponent(graphics);
+
+            Graphics2D g2 = (Graphics2D) graphics.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            int largura = getWidth();
+            int altura = getHeight();
+            int margemEsquerda = 82;
+            int margemDireita = 28;
+            int margemTopo = 44;
+            int margemBaixo = 58;
+            int areaLargura = largura - margemEsquerda - margemDireita;
+            int areaAltura = altura - margemTopo - margemBaixo;
+
+            int mesGrafico = obterMesGrafico();
+            int anoGrafico = obterAnoGrafico();
+            int diasMes = obterDiasDoMes(mesGrafico, anoGrafico);
+            double maiorEnergiaDia = obterMaiorEnergiaDiariaMes(anoGrafico, mesGrafico);
+            if (maiorEnergiaDia <= 0) {
+                desenharMensagem(g2, "Inicie o monitoramento para formar o consumo diario do mes.", largura, altura);
+                g2.dispose();
+                return;
+            }
+
+            desenharEixos(g2, margemEsquerda, margemTopo, areaLargura, areaAltura);
+
+            int[] pontosX = new int[diasMes];
+            int[] pontosY = new int[diasMes];
+            for (int dia = 1; dia <= diasMes; dia++) {
+                double energiaDia = obterEnergiaDia(anoGrafico, mesGrafico, dia);
+                int indice = dia - 1;
+                pontosX[indice] = margemEsquerda
+                        + (int) Math.round(((dia - 1) / (double) Math.max(1, diasMes - 1)) * areaLargura);
+                pontosY[indice] = calcularY(energiaDia, maiorEnergiaDia, margemTopo, areaAltura);
+            }
+
+            g2.setStroke(new BasicStroke(3f));
+            g2.setColor(corLinha);
+            for (int indice = 1; indice < diasMes; indice++) {
+                g2.drawLine(pontosX[indice - 1], pontosY[indice - 1], pontosX[indice], pontosY[indice]);
+            }
+
+            FontMetrics metricas = g2.getFontMetrics();
+            int passoRotulo = Math.max(1, diasMes / 8);
+            for (int dia = 1; dia <= diasMes; dia++) {
+                int indice = dia - 1;
+                double energiaDia = obterEnergiaDia(anoGrafico, mesGrafico, dia);
+                g2.setColor(corPonto);
+                g2.fillOval(pontosX[indice] - 4, pontosY[indice] - 4, 8, 8);
+
+                if (dia == 1 || dia == diasMes || dia % passoRotulo == 0) {
+                    g2.setColor(COR_TEXTO_SUAVE);
+                    String diaTexto = String.valueOf(dia);
+                    g2.drawString(diaTexto, centralizarTexto(metricas, diaTexto, pontosX[indice] - 14, 28),
+                            margemTopo + areaAltura + 20);
+                }
+
+                if (energiaDia > 0 && energiaDia == maiorEnergiaDia) {
+                    String energiaTexto = formatarEnergia(energiaDia) + " kWh";
+                    g2.drawString(energiaTexto, centralizarTexto(metricas, energiaTexto, pontosX[indice] - 44, 88),
+                            Math.max(margemTopo + 12, pontosY[indice] - 8));
+                }
+            }
+
+            desenharDestaqueInterativo(g2, pontosX, pontosY, maiorEnergiaDia, margemTopo, areaAltura);
+
+            g2.setColor(COR_TEXTO_SUAVE);
+            g2.drawString(obterNomeMes(mesGrafico) + " de " + anoGrafico,
+                    margemEsquerda, altura - 16);
+            g2.drawString("Max: " + formatarEnergia(maiorEnergiaDia) + " kWh", 12, margemTopo + 16);
+            g2.drawString("Total: " + formatarEnergia(calcularEnergiaMesGrafico()) + " kWh",
+                    12, margemTopo + 32);
+            g2.dispose();
+        }
+
+        private int calcularY(double valor, double maiorValor, int margemTopo, int areaAltura) {
+            return margemTopo + areaAltura - (int) Math.round((valor / maiorValor) * (areaAltura - 10));
+        }
+
+        private void atualizarDiaDestacado(int mouseX, int mouseY) {
+            int largura = getWidth();
+            int altura = getHeight();
+            int margemEsquerda = 82;
+            int margemDireita = 28;
+            int margemTopo = 44;
+            int margemBaixo = 58;
+            int areaLargura = largura - margemEsquerda - margemDireita;
+            int areaAltura = altura - margemTopo - margemBaixo;
+
+            if (mouseX < margemEsquerda || mouseX > margemEsquerda + areaLargura
+                    || mouseY < margemTopo - 16 || mouseY > margemTopo + areaAltura + 28) {
+                if (diaDestacado != -1) {
+                    diaDestacado = -1;
+                    setToolTipText("");
+                    repaint();
+                }
+                return;
+            }
+
+            int diasMes = obterDiasDoMes(obterMesGrafico(), obterAnoGrafico());
+            int novoDia = 1 + (int) Math.round(((mouseX - margemEsquerda) / (double) Math.max(1, areaLargura))
+                    * Math.max(1, diasMes - 1));
+            novoDia = Math.max(1, Math.min(diasMes, novoDia));
+
+            if (novoDia != diaDestacado) {
+                diaDestacado = novoDia;
+                double energiaDia = obterEnergiaDia(obterAnoGrafico(), obterMesGrafico(), diaDestacado);
+                double custoDia = energiaDia * sistema.obterTarifaEnergia();
+                setToolTipText("Dia " + diaDestacado
+                        + " | " + formatarEnergia(energiaDia) + " kWh"
+                        + " | " + moedaFormat.format(custoDia));
+                repaint();
+            }
+        }
+
+        private void desenharDestaqueInterativo(
+                Graphics2D g2,
+                int[] pontosX,
+                int[] pontosY,
+                double maiorEnergiaDia,
+                int margemTopo,
+                int areaAltura) {
+            if (diaDestacado < 1 || diaDestacado > pontosX.length) {
+                return;
+            }
+
+            int indice = diaDestacado - 1;
+            int x = pontosX[indice];
+            int y = pontosY[indice];
+            double energiaDia = obterEnergiaDia(obterAnoGrafico(), obterMesGrafico(), diaDestacado);
+            double custoDia = energiaDia * sistema.obterTarifaEnergia();
+
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.setColor(new Color(122, 216, 161, 120));
+            g2.drawLine(x, margemTopo, x, margemTopo + areaAltura);
+
+            g2.setColor(new Color(255, 208, 133));
+            g2.fillOval(x - 7, y - 7, 14, 14);
+            g2.setColor(COR_FUNDO);
+            g2.fillOval(x - 3, y - 3, 6, 6);
+
+            String linha1 = "Dia " + diaDestacado;
+            String linha2 = formatarEnergia(energiaDia) + " kWh";
+            String linha3 = moedaFormat.format(custoDia);
+            FontMetrics metricas = g2.getFontMetrics();
+            int caixaLargura = Math.max(metricas.stringWidth(linha2), metricas.stringWidth(linha3)) + 24;
+            caixaLargura = Math.max(caixaLargura, metricas.stringWidth(linha1) + 24);
+            int caixaAltura = 58;
+            int caixaX = Math.min(getWidth() - caixaLargura - 12, x + 12);
+            int caixaY = Math.max(14, y - caixaAltura - 12);
+
+            g2.setColor(new Color(18, 22, 29, 235));
+            g2.fillRoundRect(caixaX, caixaY, caixaLargura, caixaAltura, 8, 8);
+            g2.setColor(COR_PRIMARIA);
+            g2.drawRoundRect(caixaX, caixaY, caixaLargura, caixaAltura, 8, 8);
+
+            g2.setColor(COR_TEXTO);
+            g2.drawString(linha1, caixaX + 12, caixaY + 17);
+            g2.setColor(COR_TEXTO_SUAVE);
+            g2.drawString(linha2, caixaX + 12, caixaY + 35);
+            g2.drawString(linha3, caixaX + 12, caixaY + 51);
+        }
+    }
+
     private void desenharEixos(Graphics2D g2, int x, int y, int largura, int altura) {
-        g2.setColor(new Color(235, 238, 242));
+        g2.setColor(COR_GRADE);
         for (int i = 0; i <= 4; i++) {
             int linhaY = y + (i * altura / 4);
             g2.drawLine(x, linhaY, x + largura, linhaY);
         }
 
-        g2.setColor(new Color(130, 130, 130));
+        g2.setColor(COR_BORDA);
         g2.drawLine(x, y, x, y + altura);
         g2.drawLine(x, y + altura, x + largura, y + altura);
     }
@@ -1712,7 +2178,7 @@ public class SistemaEnergiaGUI {
         FontMetrics metricas = g2.getFontMetrics();
         int x = (largura - metricas.stringWidth(mensagem)) / 2;
         int y = altura / 2;
-        g2.setColor(new Color(95, 95, 95));
+        g2.setColor(COR_TEXTO_SUAVE);
         g2.drawString(mensagem, Math.max(16, x), y);
     }
 
@@ -1723,7 +2189,7 @@ public class SistemaEnergiaGUI {
     private double obterMaiorConsumoMensal() {
         double maiorConsumo = 0;
         for (DispositivoEletrico dispositivo : sistema.obterDispositivos()) {
-            maiorConsumo = Math.max(maiorConsumo, dispositivo.calcularConsumoMensal());
+            maiorConsumo = Math.max(maiorConsumo, dispositivo.projetarConsumoMensalKWh());
         }
         return maiorConsumo;
     }

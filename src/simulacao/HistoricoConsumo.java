@@ -1,14 +1,16 @@
 package simulacao;
 
+import util.ConstantesEnergia;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Mantém o histórico de consumo de energia organizado por dia.
+ */
 public class HistoricoConsumo {
-
-    private static final double LIMITE_USO_WATTS = 1.0;
 
     private final SimpleDateFormat chaveDataFormat;
     private final Calendar dataInicial;
@@ -22,6 +24,9 @@ public class HistoricoConsumo {
         this.registrosPorDia = new LinkedHashMap<String, RegistroConsumoDiario>();
     }
 
+    /**
+     * Registra um período de leituras no histórico, dividindo por dias conforme necessário.
+     */
     public void registrarPeriodo(List<LeituraSimulada> leituras, double duracaoSegundos) {
         if (duracaoSegundos <= 0) {
             return;
@@ -49,8 +54,8 @@ public class HistoricoConsumo {
             } else {
                 for (LeituraSimulada leitura : leituras) {
                     double energiaKWh = 0;
-                    if (leitura.obterPotenciaWatts() > LIMITE_USO_WATTS) {
-                        energiaKWh = (leitura.obterPotenciaWatts() * duracaoNoDia) / 3600000.0;
+                    if (leitura.obterPotenciaWatts() > ConstantesEnergia.LIMITE_USO_WATTS) {
+                        energiaKWh = (leitura.obterPotenciaWatts() * duracaoNoDia) / (ConstantesEnergia.SEGUNDOS_POR_HORA * 1000.0);
                     }
                     registro.registrarEnergia(leitura.obterNomeDispositivo(), energiaKWh);
                 }
@@ -63,6 +68,9 @@ public class HistoricoConsumo {
         dataAtual.setTimeInMillis(dataAtual.getTimeInMillis() + Math.round(duracaoSegundos * 1000));
     }
 
+    /**
+     * Obtém ou cria o registro de consumo para um dia específico.
+     */
     public RegistroConsumoDiario obterRegistroDia(int ano, int indiceMes, int dia) {
         Calendar calendario = Calendar.getInstance();
         calendario.clear();
@@ -72,6 +80,9 @@ public class HistoricoConsumo {
         return obterRegistroDia(calendario, false);
     }
 
+    /**
+     * Calcula a energia total consumida em um mês.
+     */
     public double calcularEnergiaMes(int ano, int indiceMes) {
         double total = 0;
 
@@ -85,6 +96,9 @@ public class HistoricoConsumo {
         return total;
     }
 
+    /**
+     * Calcula a energia consumida por um dispositivo específico em um mês.
+     */
     public double calcularEnergiaDispositivoMes(String nomeDispositivo, int ano, int indiceMes) {
         double total = 0;
 
