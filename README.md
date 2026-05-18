@@ -1,57 +1,68 @@
 # Sistema de Monitoramento de Consumo de Energia
 
-Projeto em Java desenvolvido para aplicar conceitos de Programacao Orientada a Objetos em um problema da Engenharia Eletrica: monitoramento, simulacao e analise de consumo de energia em dispositivos residenciais.
+Aplicacao desktop em Java para monitoramento, simulacao e analise de consumo de energia em dispositivos residenciais. O projeto foi desenvolvido com foco em Programacao Orientada a Objetos aplicada a um problema da Engenharia Eletrica, reunindo cadastro de equipamentos, leitura de sensores, historico de consumo, graficos e relatorios em uma interface grafica feita com Swing.
 
-O sistema usa uma interface grafica em Swing para cadastrar dispositivos, simular sensores, acompanhar consumo em tempo quase real, visualizar graficos, consultar analises mensais e abrir a analise diaria de cada mes.
+O sistema executa sem dependencias externas e mantem os dados em memoria durante a sessao. Isso o torna simples de compilar, executar e estudar, ao mesmo tempo em que preserva uma estrutura preparada para futuras evolucoes, como persistencia de dados e integracao com sensores reais.
 
-Este projeto nao persiste dados em arquivo ou banco de dados. As leituras ficam em memoria durante a execucao.
+## Principais Recursos
 
-## Guia de Execucao
+- Cadastro e remocao de dispositivos eletricos.
+- Configuracao da tarifa de energia.
+- Registro manual e simulacao automatica de leituras de sensores.
+- Monitoramento em escalas de segundo, minuto, hora ou dia.
+- Graficos de potencia em tempo real, consumo mensal por dispositivo e consumo diario do mes selecionado.
+- Calendario mensal com quantidade real de dias por mes.
+- Analise diaria detalhada por duplo clique em um mes do calendario.
+- Relatorio mensal com exportacao em arquivo TXT.
+- Simulacao baseada em estrategias por tipo de equipamento.
+- Validacao de entrada, tratamento padronizado de excecoes e formatacao centralizada.
+- Testes automatizados executaveis sem bibliotecas externas.
 
-Esta parte mostra apenas como compilar, executar e testar o projeto.
+## Tecnologias
 
-### 1. Compilar
+- Java
+- Swing
+- Java Collections Framework
+- API de datas com `Calendar`
+- Compilacao via `javac`
 
-Se o `javac` estiver no PATH:
+## Requisitos
+
+- JDK 8 ou superior.
+- Terminal com `javac` e `java` disponiveis no `PATH`, ou caminho absoluto para os executaveis do JDK.
+
+## Como Executar
+
+### 1. Compilar o projeto
 
 ```powershell
 $files = Get-ChildItem src -Recurse -Filter *.java | ForEach-Object { $_.FullName }
 javac --release 8 -encoding UTF-8 -d bin $files
 ```
 
-No Windows, caso esteja usando o JDK instalado pelo Eclipse Adoptium e ele ainda nao esteja no PATH:
+Caso o JDK nao esteja no `PATH`, informe o caminho completo do executavel:
 
 ```powershell
 $files = Get-ChildItem src -Recurse -Filter *.java | ForEach-Object { $_.FullName }
 & 'C:\Program Files\Eclipse Adoptium\jdk-25.0.2.10-hotspot\bin\javac.exe' --release 8 -encoding UTF-8 -d bin $files
 ```
 
-### 2. Executar a Interface
-
-Se o `java` estiver no PATH:
+### 2. Iniciar a interface grafica
 
 ```powershell
 java -cp bin App
 ```
 
-Com caminho completo do JDK:
+Com caminho absoluto do JDK:
 
 ```powershell
 & 'C:\Program Files\Eclipse Adoptium\jdk-25.0.2.10-hotspot\bin\java.exe' -cp bin App
 ```
 
-### 3. Rodar os Testes
-
-Depois de compilar:
+### 3. Executar os testes
 
 ```powershell
 java -cp bin testes.TestesSistemaEnergia
-```
-
-Com caminho completo do JDK:
-
-```powershell
-& 'C:\Program Files\Eclipse Adoptium\jdk-25.0.2.10-hotspot\bin\java.exe' -cp bin testes.TestesSistemaEnergia
 ```
 
 Saida esperada:
@@ -60,217 +71,89 @@ Saida esperada:
 Todos os testes passaram.
 ```
 
-### 4. Fluxo de Uso da Interface
+## Fluxo Basico de Uso
 
-1. Execute o projeto.
-2. Cadastre ou use os dispositivos iniciais.
-3. Ajuste a tarifa de energia se necessario.
-4. Escolha a escala da simulacao no monitoramento.
-5. Clique em iniciar monitoramento.
-6. Abra a aba de graficos para acompanhar a potencia e o consumo.
-7. Abra o calendario mensal para ver o consumo por mes.
+1. Inicie a aplicacao.
+2. Cadastre novos dispositivos ou utilize os dispositivos iniciais.
+3. Ajuste a tarifa de energia, se necessario.
+4. Escolha a escala de simulacao no painel de monitoramento.
+5. Inicie o monitoramento.
+6. Consulte os graficos para acompanhar potencia e consumo.
+7. Explore o calendario mensal para analisar o historico por periodo.
 8. De dois cliques em um mes para abrir a analise diaria.
-9. Abra o relatorio mensal para consultar ou exportar o resumo.
+9. Gere ou exporte o relatorio mensal.
 
-## Objetivo do Projeto
-
-Desenvolver um sistema capaz de:
-
-- Cadastrar dispositivos eletricos.
-- Simular sensores de energia.
-- Medir potencia, energia e custo.
-- Coletar automaticamente o tempo de uso pelo sensor.
-- Monitorar consumo em escala de segundo, minuto, hora ou dia.
-- Gerar graficos de consumo e potencia.
-- Exibir calendario mensal considerando a quantidade real de dias de cada mes.
-- Abrir uma analise diaria ao dar dois cliques em um mes.
-- Gerar relatorio mensal detalhado.
-
-## Funcionalidades Implementadas
-
-- Interface grafica com abas.
-- Cadastro de dispositivos.
-- Configuracao da tarifa de energia.
-- Registro de leitura manual de sensor.
-- Monitoramento automatico em tempo real.
-- Escala de simulacao:
-  - 1 segundo
-  - 1 minuto
-  - 1 hora
-  - 1 dia
-- Coleta automatica do tempo de uso pelo sensor.
-- Grafico de consumo mensal por dispositivo.
-- Grafico de potencia em tempo real.
-- Calendario mensal por ano.
-- Meses com quantidade real de dias.
-- Simulacao iniciada a partir da data atual do computador.
-- Analise diaria ao dar dois cliques em um mes.
-- Relatorio mensal detalhado.
-- Exportacao de relatorio TXT.
-- Testes manuais automatizados por classe `main`.
-
-## Descricao do Codigo
-
-Esta parte explica a organizacao interna do projeto, as classes principais e a responsabilidade de cada pacote.
-
-### Estrutura Atual
+## Organizacao do Projeto
 
 ```text
 src/
   App.java
   dispositivos/
     DispositivoEletrico.java
-  sensores/
-    SensorEnergia.java
-  sistema/
-    SistemaEnergetico.java
   gui/
     SistemaEnergiaGUI.java
+  sensores/
+    SensorEnergia.java
   simulacao/
+    EstrategiaSimulacaoDispositivo.java
+    EstrategiasSimulacaoPadrao.java
     HistoricoConsumo.java
     LeituraSimulada.java
     RegistroConsumoDiario.java
     SimuladorEnergia.java
+  sistema/
+    SistemaEnergetico.java
   testes/
     TestesSistemaEnergia.java
+  util/
+    ConstantesEnergia.java
+    FormatadorEnergia.java
+    TratadorExcecoes.java
+    ValidadorEntrada.java
 ```
 
-### App
+## Arquitetura
 
-Classe de entrada do sistema. Ela inicia a interface grafica:
+### `App`
 
-```java
-new SistemaEnergiaGUI().exibir();
-```
+Ponto de entrada da aplicacao. Inicializa a interface grafica na thread de eventos do Swing.
 
-### SistemaEnergiaGUI
+### `gui`
 
-Interface grafica feita com Swing. Ela concentra as telas do sistema:
+Concentra a experiencia do usuario na classe `SistemaEnergiaGUI`, responsavel por:
 
-- Cadastro e remocao de dispositivos.
-- Registro manual de leitura de sensor.
-- Monitoramento em tempo real.
-- Escolha da escala de simulacao.
-- Graficos.
-- Calendario mensal.
-- Analise diaria por mes.
-- Relatorio mensal.
-- Exportacao do relatorio em TXT.
+- cadastro e remocao de dispositivos;
+- configuracao de tarifa;
+- monitoramento em tempo real;
+- exibicao de graficos;
+- calendario mensal;
+- analise diaria;
+- geracao e exportacao de relatorios.
 
-### DispositivoEletrico
+### `dispositivos`, `sensores` e `sistema`
 
-Representa um equipamento eletrico.
+- `DispositivoEletrico` representa cada equipamento monitorado e acumula tempo de uso, energia coletada e projecoes.
+- `SensorEnergia` calcula potencia e energia a partir de tensao, corrente e duracao da leitura.
+- `SistemaEnergetico` gerencia os dispositivos cadastrados e centraliza os calculos de consumo e custo.
 
-Campos principais:
+### `simulacao`
 
-- `nome`
-- `potenciaWatts`
-- `tempoUsoSegundos`
-- `tempoMonitoradoSegundos`
-- `energiaColetadaKWh`
+- `SimuladorEnergia` gera leituras simuladas conforme o horario e o perfil do dispositivo.
+- `EstrategiaSimulacaoDispositivo` define o contrato para novos comportamentos de simulacao.
+- `EstrategiasSimulacaoPadrao` fornece perfis prontos para equipamentos como geladeira, chuveiro, iluminacao, televisao e ar-condicionado.
+- `HistoricoConsumo` organiza o consumo por dia e divide corretamente leituras que atravessam a virada de data.
+- `RegistroConsumoDiario` e `LeituraSimulada` modelam os dados historicos usados nos relatorios e graficos.
 
-O dispositivo nao depende mais de horas de uso digitadas manualmente. O tempo de uso e coletado quando o sensor registra uma potencia maior que o limite minimo de uso.
+### `util`
 
-Metodos importantes:
+Pacote de apoio com responsabilidades transversais:
 
-- `registrarLeituraSensor(...)`
-- `obterTempoUsoSegundos()`
-- `obterTempoMonitoradoSegundos()`
-- `obterEnergiaColetadaKWh()`
-- `projetarConsumoMensalKWh()`
-- `obterPotenciaMediaColetadaWatts()`
+- `ConstantesEnergia`: constantes de dominio e fatores de simulacao.
+- `FormatadorEnergia`: padronizacao da exibicao de energia, potencia, moeda e tempo.
+- `ValidadorEntrada`: validacoes de dados informados pelo usuario.
+- `TratadorExcecoes`: tratamento consistente de erros e mensagens amigaveis.
 
-### SensorEnergia
-
-Simula um sensor eletrico conectado a um dispositivo.
-
-Ele calcula:
-
-```text
-P = V * I
-```
-
-onde:
-
-- `P` = potencia em watts
-- `V` = tensao em volts
-- `I` = corrente em amperes
-
-Tambem calcula energia por leitura:
-
-```text
-E(kWh) = P(W) * tempo(s) / 3.600.000
-```
-
-Metodos principais:
-
-- `medirPotencia()`
-- `detectarUso()`
-- `medirEnergiaKWh()`
-- `getDuracaoLeituraSegundos()`
-
-### SistemaEnergetico
-
-Gerencia a lista de dispositivos e a tarifa de energia.
-
-Responsabilidades:
-
-- Adicionar dispositivos.
-- Remover dispositivos.
-- Calcular energia total coletada.
-- Calcular projecao mensal.
-- Calcular custo pela tarifa configurada.
-
-### HistoricoConsumo
-
-Controla o historico simulado de consumo por dia.
-
-Ele usa a data atual do computador como ponto inicial e avanca a simulacao em sequencia. Se uma leitura atravessa a virada do dia, o consumo e dividido corretamente entre os dias envolvidos.
-
-Responsabilidades:
-
-- Registrar periodos simulados.
-- Calcular energia por mes.
-- Calcular energia por ano.
-- Calcular energia por dispositivo em cada mes.
-- Recuperar registros diarios para a analise de duplo clique no calendario.
-
-### RegistroConsumoDiario
-
-Representa o consumo de um dia especifico.
-
-Armazena:
-
-- Data.
-- Tempo monitorado.
-- Energia total do dia.
-- Energia por dispositivo.
-- Maior consumidor do dia.
-
-### SimuladorEnergia
-
-Gera leituras simuladas de potencia considerando o tipo de dispositivo e o horario simulado.
-
-Exemplos de comportamento:
-
-- Geladeira alterna ciclos de carga.
-- Chuveiro tem maior chance de uso de manha e a noite.
-- Lampada tende a ligar mais a noite.
-- Televisao tende a ligar mais no periodo da noite.
-- Ar-condicionado varia conforme horario.
-
-### TestesSistemaEnergia
-
-Classe simples de testes sem bibliotecas externas.
-
-Ela valida:
-
-- Calculo de potencia e energia do sensor.
-- Projecao de consumo a partir do tempo monitorado.
-- Avanco sequencial da data simulada.
-- Divisao de consumo quando a leitura cruza a virada do dia.
-
-## Formulas Utilizadas
+## Regras e Calculos
 
 Potencia eletrica:
 
@@ -284,31 +167,51 @@ Energia em kWh:
 E = P * t / 3.600.000
 ```
 
-onde:
-
-- `P` = potencia em watts.
-- `t` = tempo em segundos.
-- `E` = energia em kWh.
-
 Custo:
 
 ```text
 Custo = energia_kWh * tarifa
 ```
 
+Onde:
+
+- `P` representa a potencia em watts.
+- `V` representa a tensao em volts.
+- `I` representa a corrente em amperes.
+- `t` representa o tempo em segundos.
+
+## Testes Cobertos
+
+A classe `testes.TestesSistemaEnergia` valida:
+
+- calculo de potencia e energia do sensor;
+- projecao de consumo com base no tempo monitorado;
+- avancos sequenciais da data simulada;
+- divisao de consumo quando uma leitura cruza a virada do dia;
+- protecao da lista interna de dispositivos;
+- validacao de entradas do sensor;
+- extensibilidade do simulador por estrategia customizada.
+
 ## Conceitos de POO Aplicados
 
-- Encapsulamento dos atributos principais.
-- Separacao de responsabilidades por classe.
+- Encapsulamento de estado e comportamento.
+- Separacao de responsabilidades por classe e pacote.
 - Composicao entre sistema, dispositivos, sensores e historico.
-- Organizacao por pacotes.
-- Classes especificas para simulacao e registro historico.
+- Uso de interfaces para extensibilidade das estrategias de simulacao.
+- Reaproveitamento de utilitarios comuns para reduzir duplicacao.
 
-## Melhorias Futuras
+## Limitacoes Atuais
 
-- Persistir leituras em arquivo ou banco de dados.
-- Adicionar filtros por dispositivo no relatorio.
-- Exportar graficos.
-- Criar alertas configuraveis por usuario.
-- Integrar com sensores reais ou IoT.
-- Adicionar mais testes de interface e cenarios de simulacao.
+- Os dados nao sao persistidos em arquivo ou banco de dados.
+- A aplicacao ainda nao se integra a sensores reais.
+- Os testes sao executados por uma classe `main`, sem framework dedicado.
+
+## Possiveis Evolucoes
+
+- Persistencia local ou em banco de dados.
+- Integracao com sensores IoT.
+- Exportacao de graficos.
+- Alertas configuraveis de consumo.
+- Filtros mais avancados nos relatorios.
+- Adocao de um framework de testes como JUnit.
+- Separacao mais profunda da interface grafica em camadas como MVC.
